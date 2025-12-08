@@ -1,0 +1,1 @@
+export const JWT_SECRET="Sahnawaz@6068"
