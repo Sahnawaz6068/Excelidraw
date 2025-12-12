@@ -2,9 +2,10 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import { JWT_SECRET } from "./config.js"; // make sure this exports a string
+import { JWT_SECRET } from "@repo/backend-common/config"; // make sure this exports a string
 import { authenticate } from "./middlewares.js";
 
+console.log(JWT_SECRET)
 
 const app = express();
 app.use(express.json());
