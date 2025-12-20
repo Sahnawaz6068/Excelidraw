@@ -1,71 +1,181 @@
-// server.js
-import express from "express";
-import jwt from "jsonwebtoken";
+import express, { Request, Response } from "express";
+import jwt, { JwtPayload } from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import { JWT_SECRET } from "@repo/backend-common/config"; // make sure this exports a string
-import { authenticate } from "./middlewares.js";
-
-console.log(JWT_SECRET)
+import { prismaClient } from "@repo/db";
+import { JWT_SECRET } from "@repo/backend-common/config";
 
 const app = express();
 app.use(express.json());
 
-// simple in-memory user store (replace with DB in production)
-const users:any = []; // { id, username, email, passwordHash }
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET is missing");
+}
 
-// ---------- SIGNUP ----------
-app.post("/signup", async (req, res) => {
+/* ======================
+   TYPES
+====================== */
+interface AuthPayload extends JwtPayload {
+  userId: string;
+}
+
+/* ======================
+   TOKEN HELPER
+====================== */
+function getUserId(req: Request): string | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+
+  const token = authHeader.split(" ")[1];
+  if (!token) return null;
+
   try {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password)
-      return res.status(400).json({ message: "username, email and password required" });
-//@ts-ignore
-    const exists = users.find((u) => u.email === email);
-    if (exists) return res.status(400).json({ message: "email already registered" });
+    const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
+    return decoded.userId;
+  } catch {
+    return null;
+  }
+}
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const newUser = { id: users.length + 1, username, email, passwordHash };
-    users.push(newUser);
+/* ======================
+   SIGNUP
+====================== */
+app.post("/signup", async (req: Request, res: Response) => {
+  const { name, email, password } = req.body as {
+    name?: string;
+    email?: string;
+    password?: string;
+  };
 
-    // respond with minimal info (not password)
-    res.status(201).json({ message: "signup successful", user: { id: newUser.id, username, email } });
-  } catch (err) {
-    res.status(500).json({ message: "internal error" });
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: "Missing fields" });
+  }
+
+  try {
+    const existing = await prismaClient.user.findUnique({
+      where: { email }
+    });
+
+    if (existing) {
+      return res.status(409).json({ message: "Email already exists" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await prismaClient.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        photo: "https://imgs.search.brave.com/BwGRFG-CLtf-OLXrqqZU5l7sqSe22rt121y_UqTWtQM/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9pbWcu/ZnJlZXBpay5jb20v/cHJlbWl1bS12ZWN0/b3IvYnVzaW5lc3Mt/bWFuLWF2YXRhci1w/cm9maWxlXzExMzMy/NTctMjQzMS5qcGc_/c2VtdD1haXNfaHli/cmlkJnc9NzQwJnE9/ODA"
+      }
+    });
+
+    res.status(201).json({ userId: user.id });
+
+  } catch {
+    res.status(500).json({ message: "Signup failed" });
   }
 });
 
-// ---------- SIGNIN ----------
-app.post("/signin", async (req, res) => {
+/* ======================
+   SIGNIN
+====================== */
+app.post("/signin", async (req: Request, res: Response) => {
+  const { email, password } = req.body as {
+    email?: string;
+    password?: string;
+  };
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Missing credentials" });
+  }
+
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ message: "email and password required" });
-//@ts-ignore
-    const user = users.find((u) => u.email === email);
-    if (!user) return res.status(404).json({ message: "user not found" });
+    const user = await prismaClient.user.findUnique({
+      where: { email }
+    });
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ message: "invalid credentials" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    // same logic as your screenshot: create token with userId
-    const userId = user.id;
-    const token = jwt.sign({ userId }, JWT_SECRET);
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     res.json({ token });
-  } catch (err) {
-    res.status(500).json({ message: "internal error" });
+
+  } catch {
+    res.status(500).json({ message: "Signin failed" });
   }
 });
 
-// ---------- PROTECTED /room ----------
-app.post("/room", authenticate, (req, res) => {
-  // req.user.userId is available from 
-  //@ts-ignore
-  res.json({ message: "accessed protected room", userId: req.user.userId });
+
+app.post("/room", async (req: Request, res: Response) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const { slug } = req.body as { slug?: string };
+  if (!slug) {
+    return res.status(400).json({ message: "Slug required" });
+  }
+
+  try {
+    const room = await prismaClient.room.create({
+      data: {
+        slug,
+        adminId: userId
+      }
+    });
+
+    res.status(201).json(room);
+
+  } catch {
+    res.status(500).json({ message: "Room creation failed" });
+  }
 });
 
-// ---------- START SERVER ----------
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`server is running on port ${PORT}`);
+
+app.post("/chat", async (req: Request, res: Response) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const { roomId, message } = req.body as {
+    roomId?: number;
+    message?: string;
+  };
+
+  if (!roomId || !message) {
+    return res.status(400).json({ message: "Missing fields" });
+  }
+
+  try {
+    const chat = await prismaClient.chat.create({
+      data: {
+        roomId,
+        message,
+        userId
+      }
+    });
+
+    res.status(201).json(chat);
+
+  } catch {
+    res.status(500).json({ message: "Message failed" });
+  }
+});
+
+app.listen(3005, () => {
+  console.log("Server running on port 3005");
 });
