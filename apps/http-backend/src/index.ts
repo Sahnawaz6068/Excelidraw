@@ -11,16 +11,14 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is missing");
 }
 
-/* ======================
-   TYPES
-====================== */
+   //TYPES
 interface AuthPayload extends JwtPayload {
   userId: string;
 }
 
-/* ======================
-   TOKEN HELPER
-====================== */
+
+   //TOKEN HELPER
+
 function getUserId(req: Request): string | null {
   const authHeader = req.headers.authorization;
   if (!authHeader) return null;
@@ -36,9 +34,7 @@ function getUserId(req: Request): string | null {
   }
 }
 
-/* ======================
-   SIGNUP
-====================== */
+
 app.post("/signup", async (req: Request, res: Response) => {
   const { name, email, password } = req.body as {
     name?: string;
@@ -77,9 +73,7 @@ app.post("/signup", async (req: Request, res: Response) => {
   }
 });
 
-/* ======================
-   SIGNIN
-====================== */
+
 app.post("/signin", async (req: Request, res: Response) => {
   const { email, password } = req.body as {
     email?: string;
