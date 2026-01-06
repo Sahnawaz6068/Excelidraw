@@ -170,6 +170,49 @@ app.post("/chat", async (req: Request, res: Response) => {
   }
 });
 
+app.get("/chats/:roomId", async (req, res) => {
+    const roomId = Number(req.params.roomId);
+
+    try {
+        // We query the 'chat' table to get messages for this specific room
+        const messages = await prismaClient.chat.findMany({
+            where: {
+                roomId: roomId,
+            },
+            orderBy: {
+                id: "desc" // Gets latest messages first
+            },
+            take: 50 // Limits to the last 50 messages
+        });
+
+        res.json({
+            messages
+        });
+    } catch (e) {
+        res.status(500).json({
+            message: "Error fetching chats"
+        });
+    }
+});
+
+app.get("/room/:slug", async (req, res) => {
+    const slug = req.params.slug;
+
+    try {
+        const room = await prismaClient.room.findFirst({
+            where: {
+                slug
+            }
+        });
+
+        res.json({
+            room
+        });
+    } catch (e) {
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
 app.listen(3005, () => {
   console.log("Server running on port 3005");
 });
