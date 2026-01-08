@@ -3,9 +3,15 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { prismaClient } from "@repo/db";
 import { JWT_SECRET } from "@repo/backend-common/config";
+import cors from "cors";
 
 const app = express();
 app.use(express.json());
+
+app.use(cors({
+  origin: "http://localhost:3005",
+  credentials: true
+}));
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is missing");
@@ -214,5 +220,5 @@ app.get("/room/:slug", async (req, res) => {
 });
 
 app.listen(3005, () => {
-  console.log("Server running on port 3005");
+  console.log("Server running on port 4000");
 });
