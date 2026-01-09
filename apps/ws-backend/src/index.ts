@@ -113,7 +113,58 @@ wss.on('connection', function connection(ws, request) {
   ws.on('close', () => {
     users = users.filter(user => user.ws !== ws);
     console.log(`User ${userId} disconnected. Total users: ${users.length}`);
-  });
+  });wss.on("connection", (ws, request) => {
+  try {
+    const fullUrl = new URL(request.url!, "http://localhost");
+    const token = fullUrl.searchParams.get("token");
+
+    if (!token) {
+      ws.close(1008, "Token missing");
+      return;
+    }
+
+    const userId = checkUser(token);
+    if (!userId) {
+      ws.close(1008, "Invalid token");
+      return;
+    }
+
+    const currentUser: User = { ws, rooms: [], userId };
+    users.push(currentUser);
+
+    ws.on("message", async (data) => {
+      let parsedData;
+      try {
+        parsedData = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+
+      if (parsedData.type === "join_room") {
+        currentUser.rooms.push(parsedData.roomId);
+      }
+
+      if (parsedData.type === "chat") {
+        users.forEach(u => {
+          if (
+            u.rooms.includes(parsedData.roomId) &&
+            u.ws.readyState === WebSocket.OPEN
+          ) {
+            u.ws.send(JSON.stringify(parsedData));
+          }
+        });
+      }
+    });
+
+    ws.on("close", () => {
+      users = users.filter(u => u !== currentUser);
+    });
+
+  } catch {
+    ws.close();
+  }
+});
+
 
   // Handle potential errors on the socket
   ws.on('error', console.error);

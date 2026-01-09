@@ -1,7 +1,3 @@
-
-import { HTTP_BACKEND } from '@/config';
-import axios from 'axios';
-
 type Shape =
   | {
       type: "rect";
@@ -17,13 +13,11 @@ type Shape =
       radius: number;
     };
 
-export async function initDraw(canvas: HTMLCanvasElement,roomId:string) {
+export function initDraw(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext("2d");
-  let existingShape: Shape[] = await getExistingShapes(roomId);
+  let existingShape: Shape[] = [];
 
   if (!ctx) return;
-
-  clearCanvas(existingShape,canvas,ctx);
 
   // Initial background
   ctx.fillStyle = "rgba(0, 0, 0)";
@@ -90,18 +84,4 @@ function clearCanvas(
         ctx.stroke();
     }
   });
-}
-
-//Getting shapes from the BE
-async function getExistingShapes(roomId: string) {
-  const res = await axios.get(`${HTTP_BACKEND}/chats/${roomId}`);
-  const messages = res.data.messages;
-console.log("HTTP_BACKEND:", HTTP_BACKEND);
-
-  const shapes = messages.map((x: { message: string }) => {
-    const messageData = JSON.parse(x.message);
-    return messageData;
-  });
-
-  return shapes;
 }
