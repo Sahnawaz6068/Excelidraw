@@ -125,4 +125,3 @@ export function AuthPage({ isSignin }: { isSignin: boolean }) {
   );
 }
 
-//Make it more generic reusable code snippet
